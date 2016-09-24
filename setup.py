@@ -18,7 +18,7 @@ setup(
     description='Youpi2 Minitel control UI',
     entry_points={
         'console_scripts': [
-            'youpi2-minitel = pybot.youpi2nitel.toplevel:main'
+            'youpi2-minitel = pybot.youpi2.minitel.toplevel:main'
         ]
     }
 )
