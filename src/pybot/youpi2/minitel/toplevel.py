@@ -8,7 +8,7 @@ from pybot.minitel.menu import Menu
 from pybot.minitel import constants
 
 from pybot.youpi2.app import YoupiApplication, ApplicationError
-from pybot.youpi2.model import YoupiArm
+from pybot.youpi2.model import YoupiArm, OutOfBoundError
 
 from __version__ import version
 
@@ -317,18 +317,14 @@ class MinitelUIApp(YoupiApplication):
                     action_func = actions[key]
                 except KeyError:
                     self._mt.beep()
-                    info_message(u'Touche incorrecte', '!')
+                    info_message(u'Touche incorrecte')
                 else:
                     try:
                         info_message(u'Mouvement en cours. Patientez...')
                         action_func()
-                    except DBusException as e:
-                        if e.get_dbus_name().endswith('OutOfBoundError'):
-                            self._mt.beep()
-                            info_message(u'Limite mécanique atteinte', '!')
-                        else:
-                            self.log_exception(e)
-                            raise
+                    except OutOfBoundError as e:
+                        self._mt.beep()
+                        info_message(u'Limite mécanique atteinte')
                     else:
                         info_ready()
 
