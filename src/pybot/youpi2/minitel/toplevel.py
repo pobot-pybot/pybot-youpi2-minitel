@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-from dbus.exceptions import DBusException
 
 from pybot.minitel import Minitel, DeviceCommunicationError
 from pybot.minitel.menu import Menu
@@ -71,9 +70,7 @@ class MinitelUIApp(YoupiApplication):
             u'Démonstration YouPinitel'.ljust(self._mt.get_screen_width())
         )
 
-    def terminate(self, *args):
-        super(MinitelUIApp, self).terminate(*args)
-
+    def on_terminate(self, *args):
         self.log_info('interrupting ongoing read')
         self._mt.interrupt()
 
