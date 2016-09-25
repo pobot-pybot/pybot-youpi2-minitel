@@ -1,20 +1,26 @@
 # -*- coding: utf-8 -*-
 
 import os
+from dbus.exceptions import DBusException
 
-from pybot.minitel import Minitel
+from pybot.minitel import Minitel, DeviceCommunicationError
 from pybot.minitel.menu import Menu
 from pybot.minitel import constants
 
-from pybot.youpi2.app import YoupiApplication
+from pybot.youpi2.app import YoupiApplication, ApplicationError
 from pybot.youpi2.model import YoupiArm
 
 from __version__ import version
 
 __author__ = 'Eric Pascual'
 
+__all__ = ['MinitelUIApp', 'main']
+
 
 class action(object):
+    """ Decorator used to register methods implementing  an action
+    which can be started from the menu.
+    """
 
     def __init__(self, actions, label=None):
         self.actions = actions
@@ -25,34 +31,40 @@ class action(object):
             func(*args, **kwargs)
 
         label = self.label or func.__doc__ or func.__name__
+        # print('adding action "%s"' % label)
         self.actions.append((label, func))
 
         return wrapper
 
 
 class MinitelUIApp(YoupiApplication):
+    """ This application implements a Videotex server for managing
+    a user interfaced based on a Minitel.
+    """
+
     NAME = 'minitel'
     TITLE = "Minitel UI"
     VERSION = version
 
-    DEFAULT_MINITEL_DEVICE = "/dev/tty/USB0"
+    DEFAULT_MINITEL_DEVICE = "/dev/ttyUSB0"
 
     _mt = None
-    _actions = None
+    _exit_allowed = False
+    _actions = []
 
     def add_custom_arguments(self, parser):
         parser.add_argument('--minitel-device', default=self.DEFAULT_MINITEL_DEVICE)
+        parser.add_argument('--exit-allowed', action='store_true', default=False)
 
-    def setup(self, minitel_device=DEFAULT_MINITEL_DEVICE, **kwargs):
+    def setup(self, minitel_device=DEFAULT_MINITEL_DEVICE, exit_allowed=False, **kwargs):
         if not os.path.exists(minitel_device):
             raise ValueError('device not found : %s' % minitel_device)
 
         self.log_info('initializing Minitel proxy (device=%s)', minitel_device)
         self._mt = Minitel(minitel_device)
 
-        # self._actions = [
-        #     (m.__doc__, m) for m in (getattr(self, name) for name in sorted(dir(self)) if name.startswith('demo_'))
-        #     ]
+        self._exit_allowed = exit_allowed
+
         self._mt.clear_all()
         self._mt.display_status(
             self._mt.text_style_sequence(inverse=True) +
@@ -62,15 +74,34 @@ class MinitelUIApp(YoupiApplication):
     def terminate(self, *args):
         super(MinitelUIApp, self).terminate(*args)
 
+        self.log_info('interrupting ongoing read')
+        self._mt.interrupt()
+
+    def teardown(self, exit_code):
         self._mt.clear_all()
         self._mt.display_text(u"I'll be back...")
         self._mt.shutdown()
 
+    _trans = {ord(f): t for f, t in zip(u'àâäéèëêïîöôùüûç', u'aaaeeeeiioouuuc')}
+
+    def display_text(self, s, line=3, centered=True):
+        if centered:
+            self.pnl.center_text_at(s.translate(self._trans)[:20], line=line)
+        else:
+            self.pnl.write_at(s.translate(self._trans)[:20], line=line, col=1)
+
     def loop(self):
+        if not self._actions:
+            raise ApplicationError('actions list as not been initialized by decorators')
+
         title = 'Menu principal'
 
+        addit = [(0, 23, ' SOMMAIRE: fin '.center(40, '-'))] if self._exit_allowed else []
         while True:
-            self.log_info('displaying main menu')
+            msg = u'displaying main menu'
+            self.log_info(msg)
+            self.display_text(msg)
+
             menu = Menu(
                 self._mt,
                 title=[title, '-' * len(title)],
@@ -79,20 +110,40 @@ class MinitelUIApp(YoupiApplication):
                 line_skip=2,
                 margin_top=1,
                 prompt_line=20,
-                #addit=[(0, 23, ' SOMMAIRE: fin '.center(40, '-'))]
+                addit=addit,
+                cancelable=self._exit_allowed
             )
 
-            choice = menu.get_choice()
-            if self.terminated:
-                break
+            try:
+                choice = menu.get_choice()
 
-            if choice:
+                self.log_info('selected choice : %s', choice)
+                if self.terminated:
+                    return True
+
+                if not choice:
+                    if self._exit_allowed:
+                        return True
+                    else:
+                        continue
+
                 label, method = self._actions[choice - 1]
-                self.log_info('selected action : %s', label)
-                method()
 
-            if self.terminated:
-                break
+                self.log_info('invoking action : %s', label)
+                self.display_text(label)
+
+                method(self)
+
+                if self.terminated:
+                    return True
+
+            except DeviceCommunicationError as e:
+                if 'Interrupted system call' in str(e):   # we got an interruption signal from the outside
+                    self.log_info('system call interrupted by external signal')
+                    return True
+                else:
+                    self.log_error_banner(e, unexpected=True)
+                    self.log_exception(e)
 
     @action(_actions)
     def display_infos(self):
@@ -151,9 +202,20 @@ class MinitelUIApp(YoupiApplication):
     @action(_actions)
     def manual_control(self):
         u"""contrôle manuel"""
+        INFO_MSG_LINE = 18
+
+        def info_message(s):
+            self._mt.display_text_center(s, y=INFO_MSG_LINE)
+
+        def info_clear():
+            self._mt.goto_xy(0, INFO_MSG_LINE)
+            self._mt.clear_line()
+
+        def info_ready():
+            info_message(u'Prêt')
 
         def _move_joint(joint, angle):
-            self.log_info.info('moving joint %s %5.1f degrees', joint, angle)
+            self.log_info('moving joint %s %5.1f degrees', joint, angle)
             self.arm.move({joint: angle}, True)
 
         def shoulder_up():
@@ -163,10 +225,10 @@ class MinitelUIApp(YoupiApplication):
             _move_joint(YoupiArm.MOTOR_SHOULDER, -5)
 
         def elbow_up():
-            _move_joint(YoupiArm.MOTOR_ELBOW, -5)
+            _move_joint(YoupiArm.MOTOR_ELBOW, 5)
 
         def elbow_down():
-            _move_joint(YoupiArm.MOTOR_ELBOW, 5)
+            _move_joint(YoupiArm.MOTOR_ELBOW, -5)
 
         def wrist_up():
             _move_joint(YoupiArm.MOTOR_WRIST, +5)
@@ -184,7 +246,7 @@ class MinitelUIApp(YoupiApplication):
             self.arm.open_gripper(True)
 
         def gripper_close():
-            self.arm.open_gripper(False)
+            self.arm.close_gripper(True)
 
         def wrist_ccw():
             _move_joint(YoupiArm.MOTOR_HAND_ROT, -5)
@@ -231,6 +293,13 @@ class MinitelUIApp(YoupiApplication):
 
         key_return = constants.SEP + constants.KeyCode.RETOUR
         valid_keys = actions.keys() + [key_return]
+
+        hline = '-' * self._mt.get_screen_width()
+        self._mt.display_text(hline, y=INFO_MSG_LINE - 1)
+        self._mt.display_text(hline, y=INFO_MSG_LINE + 1)
+
+        info_ready()
+
         while True:
             key = self._mt.wait_for_key(valid_keys, max_wait=60)
             if key in (None, key_return):
@@ -241,11 +310,27 @@ class MinitelUIApp(YoupiApplication):
                 self._mt.display_text_center(u"Veuillez patienter...", y=7)
                 self.arm.go_home([m for m in YoupiArm.MOTORS_ALL if m != YoupiArm.MOTOR_GRIPPER], True)
                 return
+
             else:
+                info_clear()
                 try:
-                    actions[key]()
+                    action_func = actions[key]
                 except KeyError:
                     self._mt.beep()
+                    info_message(u'Touche incorrecte', '!')
+                else:
+                    try:
+                        info_message(u'Mouvement en cours. Patientez...')
+                        action_func()
+                    except DBusException as e:
+                        if e.get_dbus_name().endswith('OutOfBoundError'):
+                            self._mt.beep()
+                            info_message(u'Limite mécanique atteinte', '!')
+                        else:
+                            self.log_exception(e)
+                            raise
+                    else:
+                        info_ready()
 
 
 def main():
