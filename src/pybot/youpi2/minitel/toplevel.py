@@ -86,13 +86,16 @@ class MinitelUIApp(YoupiApplication):
         self._mt.clear_all()
         self._mt.display_text(u"I'll be back...")
 
-        img_path = pkg_resources.resource_filename(_my_package, 'data/img/pobot-logo-small.png')
-        img = Image.open(img_path)
-        vt_img = VideotexImage(img)
-        code = vt_img.to_videotex()
+        if Image:
+            img_path = pkg_resources.resource_filename(_my_package, 'data/img/pobot-logo-small.png')
+            img = Image.open(img_path)
+            vt_img = VideotexImage(img)
+            code = vt_img.to_videotex()
 
-        self._mt.videotex_graphic_mode()
-        self._mt.send(code)
+            self._mt.videotex_graphic_mode()
+            self._mt.send(code)
+        else:
+            self.log_warning('PIL not installed. Unable to display graphics.')
 
         self._mt.shutdown()
 
