@@ -84,19 +84,27 @@ class MinitelUIApp(YoupiApplication):
 
     def teardown(self, exit_code):
         self._mt.clear_all()
-        self._mt.display_text(u"I'll be back...")
 
         if Image:
+            self.log_info('Displaying logo...')
+
             img_path = pkg_resources.resource_filename(_my_package, 'data/img/pobot-logo-small.png')
-            img = Image.open(img_path)
-            vt_img = VideotexImage(img)
-            code = vt_img.to_videotex()
-
-            self._mt.videotex_graphic_mode()
-            self._mt.send(code)
+            self.log_info('.. loading image from %s', img_path)
+            if os.path.exists(img_path):
+                img = Image.open(img_path)
+                self.log_info('.. converting it to Videotex')
+                vt_img = VideotexImage(img)
+                code = ''.join(vt_img.to_videotex())
+                self.log_info('.. sending stream to Minitel (%d bytes)', len(code))
+                self._mt.videotex_graphic_mode()
+                self._mt.send(code)
+                self.log_info('.. all done.')
+            else:
+                self.log_error('!! file not found')
         else:
-            self.log_warning('PIL not installed. Unable to display graphics.')
+            self.log_warning('PIL not installed. Unable to display logo.')
 
+        self._mt.display_text(u"I'll be back...", 24, 23)
         self._mt.shutdown()
 
     _trans = {ord(f): t for f, t in zip(u'àâäéèëêïîöôùüûç', u'aaaeeeeiioouuuc')}
