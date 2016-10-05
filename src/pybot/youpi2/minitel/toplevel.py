@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import os
+import pkg_resources
 
-from pybot.minitel import Minitel, DeviceCommunicationError
+try:
+    from PIL import Image
+    from pybot.minitel.image import VideotexImage
+except ImportError:
+    Image = VideotexImage = None
+
+from pybot.minitel import Minitel, DeviceCommunicationError, constants
 from pybot.minitel.menu import Menu
-from pybot.minitel import constants
 
 from pybot.youpi2.app import YoupiApplication, ApplicationError
 from pybot.youpi2.model import YoupiArm, OutOfBoundError
@@ -14,6 +20,8 @@ from __version__ import version
 __author__ = 'Eric Pascual'
 
 __all__ = ['MinitelUIApp', 'main']
+
+_my_package = '.'.join(__name__.split('.')[:-1])
 
 
 class action(object):
@@ -77,6 +85,15 @@ class MinitelUIApp(YoupiApplication):
     def teardown(self, exit_code):
         self._mt.clear_all()
         self._mt.display_text(u"I'll be back...")
+
+        img_path = pkg_resources.resource_filename(_my_package, 'data/img/pobot-logo-small.png')
+        img = Image.open(img_path)
+        vt_img = VideotexImage(img)
+        code = vt_img.to_videotex()
+
+        self._mt.videotex_graphic_mode()
+        self._mt.send(code)
+
         self._mt.shutdown()
 
     _trans = {ord(f): t for f, t in zip(u'àâäéèëêïîöôùüûç', u'aaaeeeeiioouuuc')}

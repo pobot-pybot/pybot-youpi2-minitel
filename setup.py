@@ -9,6 +9,9 @@ setup(
     namespace_packages=['pybot', 'pybot.youpi2'],
     packages=find_packages("src"),
     package_dir={'': 'src'},
+    package_data={'pybot.youpi2.http': [
+        'data/img/*.png',
+    ]},
     url='',
     license='',
     author='Eric Pascual',
