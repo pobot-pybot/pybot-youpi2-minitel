@@ -335,6 +335,7 @@ class MinitelUIApp(YoupiApplication):
                 self._mt.display_text_center(u"Réinitialisation du bras", y=5)
                 self._mt.display_text_center(u"Veuillez patienter...", y=7)
                 self.arm.go_home([m for m in YoupiArm.MOTORS_ALL if m != YoupiArm.MOTOR_GRIPPER], True)
+                self.arm.soft_hi_Z()
                 return
 
             else:
