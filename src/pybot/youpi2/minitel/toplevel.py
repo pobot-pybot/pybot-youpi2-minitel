@@ -171,6 +171,10 @@ class MinitelUIApp(YoupiApplication):
                     self.log_error_banner(e, unexpected=True)
                     self.log_exception(e)
 
+            except KeyboardInterrupt:
+                self.log_info('external interrupt caught')
+                return True
+
     @action(_actions)
     def display_infos(self):
         u"""quelques explications"""
