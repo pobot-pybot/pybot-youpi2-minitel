@@ -59,8 +59,9 @@ class MinitelUIApp(YoupiApplication):
     _exit_allowed = False
     _actions = []
 
-    def add_custom_arguments(self, parser):
-        parser.add_argument('--minitel-device', default=self.DEFAULT_MINITEL_DEVICE)
+    @classmethod
+    def add_custom_arguments(cls, parser):
+        parser.add_argument('--minitel-device', default=cls.DEFAULT_MINITEL_DEVICE)
         parser.add_argument('--exit-allowed', action='store_true', default=False)
 
     def setup(self, minitel_device=DEFAULT_MINITEL_DEVICE, exit_allowed=False, **kwargs):
@@ -361,4 +362,4 @@ class MinitelUIApp(YoupiApplication):
 
 
 def main():
-    MinitelUIApp().main()
+    MinitelUIApp.main()
